@@ -1,12 +1,16 @@
 use needletail::{parse_fastx_file,};
 use needletail::parser::{SequenceRecord, LineEnding, write_fastq};
-use std::fs::{File, OpenOptions};
-use std::io::{BufWriter};
+use flate2::Compression;
+use flate2::write::GzEncoder;
+use std::fs::OpenOptions;
+use std::io::{BufWriter, Write};
 use std::process::exit;
+
 
 pub fn foo(path: &str, outpath: &str, minqual: f64, minlen: usize, maxlen: usize, offset: u8) {
     let mut reader = parse_fastx_file(path).expect("Failed to open parser");
-    let mut writer = BufWriter::new(
+    let mut writer = GzEncoder::new(
+        BufWriter::new(
         match OpenOptions::new().write(true).create_new(true).open(outpath) {
             Ok(file) => file,
             Err(e) => {
@@ -14,7 +18,7 @@ pub fn foo(path: &str, outpath: &str, minqual: f64, minlen: usize, maxlen: usize
                 exit(1);
             }
         }
-    );
+        ), Compression::new(3));
     
     while let Some(maybe_record) = reader.next() {
         let record = maybe_record.expect("Failed to parse record");
@@ -28,7 +32,7 @@ fn passes(rec: &SequenceRecord, min_qual: f64,
             min_len: usize, max_len: usize, offset: u8) -> bool {
     if mean_phred_qual(rec, offset) < min_qual { return false }
     if rec.seq().len() < min_len || rec.seq().len() > max_len { return false }
-    return true
+    true
 }
 
 fn phred_to_prob(phred: u8, offset: u8) -> f64 {
@@ -49,7 +53,7 @@ fn mean_phred_qual(rec: &SequenceRecord, offset: u8) -> f64 {
     prob_to_phred(prob / n)
 }
     
-fn write_fastq_record(writer: &mut BufWriter<File>, rec: &SequenceRecord) {
+fn write_fastq_record(writer: &mut impl Write, rec: &SequenceRecord) {
     write_fastq(rec.id(), &rec.seq(), rec.qual(),
                 writer, LineEnding::Unix).expect("Failed to write record.")
 }
